@@ -23,21 +23,26 @@ uniform mat4 uModel;
 uniform mat4 uViewProj;
 
 out vec3 vNormalW;
+out vec3 vPosW;
 
 void main() {
   vec4 wp = uModel * vec4(aPos, 1.0);
+  vPosW = wp.xyz;
   vNormalW = mat3(uModel) * aNormal;
   gl_Position = uViewProj * wp;
 }
 `;
 
-// Main shading (Lambert/Gooch/Toon)
+// Main shading (Lambert/Gooch/Toon/Hatch)
+// ✅ Toon uses LUT/ramp texture (uRamp)
+// ✅ Hatch is student-designed: procedural triplanar cross-hatching
 const FS = `#version 300 es
 precision highp float;
 
 in vec3 vNormalW;
+in vec3 vPosW;
 
-uniform int uMode;        // 0=Lambert, 1=Gooch, 2=Toon
+uniform int uMode;        // 0=Lambert, 1=Gooch, 2=Toon, 3=Hatch
 uniform int uWire;        // 0=fill, 1=wire overlay
 
 uniform vec3  uBaseColor;
@@ -45,10 +50,60 @@ uniform vec3  uCoolColor;
 uniform vec3  uWarmColor;
 uniform float uSteps;
 
+// Toon LUT
+uniform sampler2D uRamp;  // toon LUT (Nx1)
+
+// Student NPR (Hatch) controls
+uniform float uHatchScale;     // density
+uniform float uHatchWidth;     // line width (in stripe domain)
+uniform float uHatchStrength;  // 0..1
+
 out vec4 outColor;
 
 const vec3 lightDir = normalize(vec3(-0.4, 1.0, 0.3));
 const vec3 ambient  = vec3(0.10, 0.10, 0.12);
+
+// ------------- Hatch helpers -------------
+float stripe1D(float x, float width) {
+  float f = abs(fract(x) - 0.5);
+  // 1.0 at line center, 0.0 away from line
+  return smoothstep(width, 0.0, f);
+}
+
+float hatch2D(vec2 uv, float scale, float width, float darkness) {
+  // 3 directions: 0°, 45°, 90°
+  vec2 d0 = normalize(vec2(1.0, 0.0));
+  vec2 d1 = normalize(vec2(0.7071, 0.7071));
+  vec2 d2 = normalize(vec2(0.0, 1.0));
+
+  float t0 = dot(uv, d0) * scale;
+  float t1 = dot(uv, d1) * scale;
+  float t2 = dot(uv, d2) * scale;
+
+  float l0 = stripe1D(t0, width);
+  float l1 = stripe1D(t1, width);
+  float l2 = stripe1D(t2, width);
+
+  // darker -> more layers appear
+  float w1 = smoothstep(0.30, 0.60, darkness);
+  float w2 = smoothstep(0.55, 0.85, darkness);
+
+  float lines = max(l0, max(l1 * w1, l2 * w2));
+  return clamp(lines, 0.0, 1.0);
+}
+
+float triplanarHatch(vec3 posW, vec3 nW, float scale, float width, float darkness) {
+  vec3 an = abs(nW);
+  float s = an.x + an.y + an.z + 1e-5;
+  vec3 w = an / s;
+
+  float hXY = hatch2D(posW.xy, scale, width, darkness); // normal ~Z
+  float hXZ = hatch2D(posW.xz, scale, width, darkness); // normal ~Y
+  float hYZ = hatch2D(posW.yz, scale, width, darkness); // normal ~X
+
+  // weights: xy uses z, xz uses y, yz uses x
+  return hXY * w.z + hXZ * w.y + hYZ * w.x;
+}
 
 void main() {
   if (uWire == 1) {
@@ -58,22 +113,42 @@ void main() {
 
   vec3 N = normalize(vNormalW);
   vec3 L = normalize(lightDir);
-  float NdotL = max(dot(N, L), 0.0);
+
+  // NOTE: keep raw dot for Gooch (needs -1..1)
+  float d = dot(N, L);          // -1..1
+  float NdotL = max(d, 0.0);    // 0..1
 
   vec3 color;
 
   if (uMode == 0) {
+    // Lambert
     vec3 diffuse = uBaseColor * NdotL;
     color = ambient + diffuse;
+
   } else if (uMode == 1) {
-    float t = clamp(NdotL * 0.5 + 0.5, 0.0, 1.0);
+    // Gooch (fixed: use raw dot so cool side actually appears)
+    float t = clamp(d * 0.5 + 0.5, 0.0, 1.0);
     vec3 gooch = mix(uCoolColor, uWarmColor, t);
     color = gooch * (0.5 + 0.5 * uBaseColor);
+
+  } else if (uMode == 2) {
+    // Toon via LUT texture
+    float shade = texture(uRamp, vec2(NdotL, 0.5)).r; // 0..1
+    color = ambient + (uBaseColor * shade);
+
   } else {
-    float steps = max(uSteps, 2.0);
-    float q = floor(NdotL * steps) / (steps - 1.0);
-    q = clamp(q, 0.0, 1.0);
-    color = ambient + (uBaseColor * q);
+    // Student NPR: Procedural Cross-Hatching (triplanar, shadow-dependent)
+    float darkness = 1.0 - clamp(NdotL, 0.0, 1.0);
+
+    // "paper + paint" base
+    float lit = 0.25 + 0.75 * clamp(NdotL, 0.0, 1.0);
+    vec3 paper = ambient + uBaseColor * lit;
+
+    float hatch = triplanarHatch(vPosW, N, uHatchScale, uHatchWidth, darkness);
+
+    vec3 ink = vec3(0.02);
+    float a = clamp(uHatchStrength * hatch, 0.0, 1.0);
+    color = mix(paper, ink, a);
   }
 
   outColor = vec4(color, 1.0);
@@ -98,7 +173,7 @@ out vec4 outColor;
 
 void main() {
   vec3 n = normalize(vNormalW);
-  vec3 encN = 0.5 * (n + 1.0); // [-1,1] -> [0,1]
+  vec3 encN = 0.5 * (n + 1.0);  // [-1,1] -> [0,1]
   float depth = gl_FragCoord.z; // non-linear ok for edges
   outColor = vec4(encN, depth);
 }
@@ -187,11 +262,20 @@ export class Renderer {
     this.edgeThreshold = 0.18;  // 0.02..0.6
 
     // shading params
-    this.mode = 0;
+    this.mode = 0; // 0 lambert, 1 gooch, 2 toon, 3 hatch
     this.baseColor = new Float32Array([0.20, 0.85, 0.55]);
     this.coolColor = new Float32Array([0x33 / 255, 0x66 / 255, 0xcc / 255]);
     this.warmColor = new Float32Array([0xff / 255, 0xcc / 255, 0x66 / 255]);
+
+    // Student NPR (Hatch) params
+    this.hatchScale = 12.0;
+    this.hatchWidth = 0.10;
+    this.hatchStrength = 0.75;
+
+    // Toon (LUT)
     this.toonSteps = 3.0;
+    this.rampSize = 256;
+    this.rampTex = this._createToonRampTexture(this.toonSteps);
 
     // orbit/zoom
     this.yaw = 0.8;
@@ -218,6 +302,14 @@ export class Renderer {
       uCoolColor: gl.getUniformLocation(this.program, "uCoolColor"),
       uWarmColor: gl.getUniformLocation(this.program, "uWarmColor"),
       uSteps: gl.getUniformLocation(this.program, "uSteps"),
+
+      // Toon LUT
+      uRamp: gl.getUniformLocation(this.program, "uRamp"),
+
+      // Hatch uniforms
+      uHatchScale: gl.getUniformLocation(this.program, "uHatchScale"),
+      uHatchWidth: gl.getUniformLocation(this.program, "uHatchWidth"),
+      uHatchStrength: gl.getUniformLocation(this.program, "uHatchStrength"),
     };
 
     // Uniform locations (outline)
@@ -263,12 +355,26 @@ export class Renderer {
     if (modeStr === "lambert") this.mode = 0;
     else if (modeStr === "gooch") this.mode = 1;
     else if (modeStr === "toon") this.mode = 2;
+    else if (modeStr === "hatch") this.mode = 3;
     else this.mode = 0;
   }
 
   setGoochCool(rgb01) { this.coolColor = new Float32Array(rgb01); }
   setGoochWarm(rgb01) { this.warmColor = new Float32Array(rgb01); }
-  setToonSteps(v) { this.toonSteps = v; }
+
+  // Student NPR (Hatch)
+  setHatchScale(v) { this.hatchScale = v; }
+  setHatchWidth(v) { this.hatchWidth = v; }
+  setHatchStrength(v) { this.hatchStrength = v; }
+
+  // ✅ IMPORTANT: steps değişince ramp texture yeniden üretiliyor
+  setToonSteps(v) {
+    this.toonSteps = v;
+
+    const gl = this.gl;
+    if (this.rampTex) gl.deleteTexture(this.rampTex);
+    this.rampTex = this._createToonRampTexture(this.toonSteps);
+  }
 
   setLineMode(v) { this.lineMode = v; }
   setLineThickness(v) { this.lineThickness = v; }
@@ -278,6 +384,40 @@ export class Renderer {
     this.yaw = 0.8;
     this.pitch = -0.4;
     this.distance = 4.0;
+  }
+
+  // ---- Toon LUT texture generator ----
+  _createToonRampTexture(steps) {
+    const gl = this.gl;
+
+    const size = this.rampSize || 256;
+    const data = new Uint8Array(size * 4);
+
+    const s = Math.max(2, Math.floor(steps));
+
+    for (let i = 0; i < size; i++) {
+      const x = i / (size - 1);              // 0..1
+      const q = Math.floor(x * s) / (s - 1); // quantize
+      const v = Math.max(0, Math.min(255, Math.round(q * 255)));
+
+      data[i * 4 + 0] = v;
+      data[i * 4 + 1] = v;
+      data[i * 4 + 2] = v;
+      data[i * 4 + 3] = 255;
+    }
+
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, size, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+
+    // band’ler net olsun diye NEAREST
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    return tex;
   }
 
   // ---- mesh upload ----
@@ -496,11 +636,11 @@ export class Renderer {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 
-    // PASS B: Clear viewport
+    // PASS B: Clear viewport (dark background)
     gl.enable(gl.SCISSOR_TEST);
     gl.viewport(x, y, w, h);
     gl.scissor(x, y, w, h);
-    gl.clearColor(1.0, 0.5, 0.5, 1.0); // arkaplan burası
+    gl.clearColor(0.7, 0.5, 0.5, 1.0); // arka plan
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.disable(gl.SCISSOR_TEST);
 
@@ -530,6 +670,12 @@ export class Renderer {
 
     // PASS 1: Main shading
     gl.useProgram(this.program);
+
+    // ✅ bind toon ramp texture (always bound; only used when uMode==2)
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.rampTex);
+    gl.uniform1i(this.loc.uRamp, 0);
+
     gl.uniformMatrix4fv(this.loc.uModel, false, model);
     gl.uniformMatrix4fv(this.loc.uViewProj, false, viewProj);
     gl.uniform1i(this.loc.uMode, modeForThisPass);
@@ -537,6 +683,11 @@ export class Renderer {
     gl.uniform3fv(this.loc.uCoolColor, this.coolColor);
     gl.uniform3fv(this.loc.uWarmColor, this.warmColor);
     gl.uniform1f(this.loc.uSteps, this.toonSteps);
+
+    // Hatch uniforms (used when uMode==3)
+    gl.uniform1f(this.loc.uHatchScale, this.hatchScale);
+    gl.uniform1f(this.loc.uHatchWidth, this.hatchWidth);
+    gl.uniform1f(this.loc.uHatchStrength, this.hatchStrength);
 
     gl.bindVertexArray(this.vaoFill);
     gl.enable(gl.POLYGON_OFFSET_FILL);
