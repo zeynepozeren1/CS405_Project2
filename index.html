@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>CS405 Project 2</title>
+
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body { background:#0b1020; color:#e5e7eb; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+
+    #topbar{
+      position: fixed; top: 0; left: 0; right: 0;
+      height: 44px;
+      display:flex; align-items:center; gap:14px;
+      padding: 0 14px;
+      background: rgba(255,255,255,0.92);
+      color:#111827;
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+      z-index: 5;
+      user-select: none;
+    }
+    #topbar label { display:flex; align-items:center; gap:8px; font-size:14px; }
+    #topbar select { height: 28px; }
+    #topbar input[type="checkbox"]{ width: 16px; height: 16px; }
+
+    #status { margin-left:auto; font-weight:700; }
+    #wrap { height: 100%; padding-top: 44px; }
+    #glcanvas { width: 100%; height: calc(100vh - 44px); display:block; background:#050711; }
+  </style>
+</head>
+
+<body>
+  <div id="topbar">
+    <label>
+      Shader:
+      <select id="shaderSelect">
+        <option value="toon">Toon</option>
+        <option value="edge">Edge</option>
+        <option value="oil">Oil</option>
+      </select>
+    </label>
+
+    <label>
+      Compare (side-by-side):
+      <input id="compareToggle" type="checkbox" />
+    </label>
+
+    <label>
+      Wire overlay:
+      <input id="wireOverlay" type="checkbox" />
+    </label>
+
+    <label>
+      Rotate:
+      <input id="rotateToggle" type="checkbox" checked />
+    </label>
+
+    <span id="status"></span>
+  </div>
+
+  <div id="wrap">
+    <canvas id="glcanvas"></canvas>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
