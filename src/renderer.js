@@ -1,3 +1,4 @@
+// src/renderer.js
 import { createProgram } from "./gl.js";
 import {
   degToRad,
@@ -6,33 +7,34 @@ import {
   mat4RotateX,
   mat4RotateY,
   mat4Translate,
-  mat4ScaleUniform, // ✅ NEW
+  mat4ScaleUniform,
 } from "./utils.js";
 
+// -------------------- SHADERS --------------------
+
+// ✅ Attribute locations fixed (CRITICAL)
 const VS = `#version 300 es
 precision highp float;
 
-in vec3 aPos;
-in vec3 aNormal;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNormal;
 
 uniform mat4 uModel;
 uniform mat4 uViewProj;
 
-out vec3 vWorldPos;
 out vec3 vNormalW;
 
 void main() {
   vec4 wp = uModel * vec4(aPos, 1.0);
-  vWorldPos = wp.xyz;
   vNormalW = mat3(uModel) * aNormal;
   gl_Position = uViewProj * wp;
 }
 `;
 
+// Main shading (Lambert/Gooch/Toon)
 const FS = `#version 300 es
 precision highp float;
 
-in vec3 vWorldPos;
 in vec3 vNormalW;
 
 uniform int uMode;        // 0=Lambert, 1=Gooch, 2=Toon
@@ -78,7 +80,7 @@ void main() {
 }
 `;
 
-// ✅ NEW: outline fragment shader
+// Flipped hull outline
 const OUTLINE_FS = `#version 300 es
 precision highp float;
 out vec4 outColor;
@@ -86,6 +88,88 @@ void main() {
   outColor = vec4(0.0, 0.0, 0.0, 1.0);
 }
 `;
+
+// Normal+Depth pass to texture (RGBA: normal in rgb, depth in a)
+const ND_FS = `#version 300 es
+precision highp float;
+
+in vec3 vNormalW;
+out vec4 outColor;
+
+void main() {
+  vec3 n = normalize(vNormalW);
+  vec3 encN = 0.5 * (n + 1.0); // [-1,1] -> [0,1]
+  float depth = gl_FragCoord.z; // non-linear ok for edges
+  outColor = vec4(encN, depth);
+}
+`;
+
+// Fullscreen quad edge detect
+const EDGE_VS = `#version 300 es
+precision highp float;
+
+layout(location=0) in vec2 aPos;
+out vec2 vUV;
+
+void main() {
+  vUV = aPos * 0.5 + 0.5;
+  gl_Position = vec4(aPos, 0.0, 1.0);
+}
+`;
+
+const EDGE_FS = `#version 300 es
+precision highp float;
+
+in vec2 vUV;
+out vec4 outColor;
+
+uniform sampler2D uND;
+uniform vec2 uTexel;        // (1/width, 1/height)
+uniform int uEdgeMode;      // 2 = depth, 3 = normal
+uniform float uThreshold;   // 0.02..0.6
+uniform float uThickness;   // 1..5 (pixels)
+
+vec3 decodeNormal(vec3 enc) {
+  return normalize(enc * 2.0 - 1.0);
+}
+
+void main() {
+  vec2 off = uTexel * uThickness;
+
+  vec4 c   = texture(uND, vUV);
+  vec4 cx  = texture(uND, vUV + vec2(off.x, 0.0));
+  vec4 cxm = texture(uND, vUV - vec2(off.x, 0.0));
+  vec4 cy  = texture(uND, vUV + vec2(0.0, off.y));
+  vec4 cym = texture(uND, vUV - vec2(0.0, off.y));
+
+  float edgeValue = 0.0;
+
+  if (uEdgeMode == 2) {
+    float d  = c.a;
+    float dx = abs(cx.a  - d) + abs(cxm.a - d);
+    float dy = abs(cy.a  - d) + abs(cym.a - d);
+    edgeValue = dx + dy;
+  } else if (uEdgeMode == 3) {
+    vec3 n  = decodeNormal(c.rgb);
+    vec3 nx = decodeNormal(cx.rgb);
+    vec3 nxm= decodeNormal(cxm.rgb);
+    vec3 ny = decodeNormal(cy.rgb);
+    vec3 nym= decodeNormal(cym.rgb);
+
+    float dx = length(nx - n) + length(nxm - n);
+    float dy = length(ny - n) + length(nym - n);
+    edgeValue = dx + dy;
+  }
+
+  float a = smoothstep(uThreshold, uThreshold * 2.5, edgeValue);
+  a = clamp(a, 0.0, 1.0);
+
+  if (a <= 0.001) discard;
+  outColor = vec4(0.0, 0.0, 0.0, a);
+}
+`;
+
+// -------------------- RENDERER --------------------
 
 export class Renderer {
   constructor(gl, canvas) {
@@ -97,14 +181,14 @@ export class Renderer {
     this.wireOverlay = false;
     this.compare = false;
 
-    // ✅ NEW: line mode
-    this.lineMode = 0;        // 0 disabled, 1 flipped hull
-    this.lineThickness = 2.0; // 1..5
-    this.edgeThreshold = 0.18;
+    // Lines
+    this.lineMode = 0;          // 0 disabled, 1 hull, 2 depth, 3 normal
+    this.lineThickness = 2.0;   // 1..5
+    this.edgeThreshold = 0.18;  // 0.02..0.6
 
     // shading params
     this.mode = 0;
-    this.baseColor = new Float32Array([0.80, 0.85, 0.95]);
+    this.baseColor = new Float32Array([0.20, 0.85, 0.55]);
     this.coolColor = new Float32Array([0x33 / 255, 0x66 / 255, 0xcc / 255]);
     this.warmColor = new Float32Array([0xff / 255, 0xcc / 255, 0x66 / 255]);
     this.toonSteps = 3.0;
@@ -118,14 +202,14 @@ export class Renderer {
     this.lastY = 0;
     this._setupMouse();
 
-    // programs
+    // Programs
     this.program = createProgram(gl, VS, FS);
-    this.outlineProgram = createProgram(gl, VS, OUTLINE_FS); // ✅ NEW
+    this.outlineProgram = createProgram(gl, VS, OUTLINE_FS);
+    this.ndProgram = createProgram(gl, VS, ND_FS);
+    this.edgeProgram = createProgram(gl, EDGE_VS, EDGE_FS);
 
-    // locations (main)
+    // Uniform locations (main)
     this.loc = {
-      aPos: gl.getAttribLocation(this.program, "aPos"),
-      aNormal: gl.getAttribLocation(this.program, "aNormal"),
       uModel: gl.getUniformLocation(this.program, "uModel"),
       uViewProj: gl.getUniformLocation(this.program, "uViewProj"),
       uMode: gl.getUniformLocation(this.program, "uMode"),
@@ -136,11 +220,36 @@ export class Renderer {
       uSteps: gl.getUniformLocation(this.program, "uSteps"),
     };
 
-    // ✅ NEW: locations (outline)
+    // Uniform locations (outline)
     this.oLoc = {
       uModel: gl.getUniformLocation(this.outlineProgram, "uModel"),
       uViewProj: gl.getUniformLocation(this.outlineProgram, "uViewProj"),
     };
+
+    // Uniform locations (ND)
+    this.ndLoc = {
+      uModel: gl.getUniformLocation(this.ndProgram, "uModel"),
+      uViewProj: gl.getUniformLocation(this.ndProgram, "uViewProj"),
+    };
+
+    // Uniform locations (edge)
+    this.eLoc = {
+      uND: gl.getUniformLocation(this.edgeProgram, "uND"),
+      uTexel: gl.getUniformLocation(this.edgeProgram, "uTexel"),
+      uEdgeMode: gl.getUniformLocation(this.edgeProgram, "uEdgeMode"),
+      uThreshold: gl.getUniformLocation(this.edgeProgram, "uThreshold"),
+      uThickness: gl.getUniformLocation(this.edgeProgram, "uThickness"),
+    };
+
+    // Fullscreen quad (VAO)
+    this._initQuad();
+
+    // ND framebuffer
+    this.ndFBO = null;
+    this.ndTex = null;
+    this.ndDepth = null;
+    this.ndW = 0;
+    this.ndH = 0;
 
     gl.enable(gl.DEPTH_TEST);
   }
@@ -149,11 +258,6 @@ export class Renderer {
   setAutoRotate(on) { this.autoRotate = on; }
   setWireOverlay(on) { this.wireOverlay = on; }
   setCompareMode(on) { this.compare = on; }
-
-  setLineMode(v) { this.lineMode = v; }                 // 0/1/2/3
-  setLineThickness(v) { this.lineThickness = v; }       // 1..5
-  setEdgeThreshold(v) { this.edgeThreshold = v; }       // 0.02..0.6
-
 
   setShaderMode(modeStr) {
     if (modeStr === "lambert") this.mode = 0;
@@ -166,16 +270,22 @@ export class Renderer {
   setGoochWarm(rgb01) { this.warmColor = new Float32Array(rgb01); }
   setToonSteps(v) { this.toonSteps = v; }
 
+  setLineMode(v) { this.lineMode = v; }
+  setLineThickness(v) { this.lineThickness = v; }
+  setEdgeThreshold(v) { this.edgeThreshold = v; }
+
   resetView() {
     this.yaw = 0.8;
     this.pitch = -0.4;
     this.distance = 4.0;
   }
 
+  // ---- mesh upload ----
   setMesh(mesh) {
     const gl = this.gl;
     this.mesh = mesh;
 
+    // VBOs
     this.posBuf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuf);
     gl.bufferData(gl.ARRAY_BUFFER, mesh.positions, gl.STATIC_DRAW);
@@ -184,6 +294,7 @@ export class Renderer {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.nBuf);
     gl.bufferData(gl.ARRAY_BUFFER, mesh.normals, gl.STATIC_DRAW);
 
+    // EBOs
     this.iBuf = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.iBuf);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.STATIC_DRAW);
@@ -194,33 +305,95 @@ export class Renderer {
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.lineIndices, gl.STATIC_DRAW);
     this.wireCount = mesh.lineIndices.length;
 
+    // ✅ VAO fill (location 0/1 fixed)
     this.vaoFill = gl.createVertexArray();
     gl.bindVertexArray(this.vaoFill);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuf);
-    gl.enableVertexAttribArray(this.loc.aPos);
-    gl.vertexAttribPointer(this.loc.aPos, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.nBuf);
-    gl.enableVertexAttribArray(this.loc.aNormal);
-    gl.vertexAttribPointer(this.loc.aNormal, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.iBuf);
     gl.bindVertexArray(null);
 
+    // ✅ VAO wire
     this.vaoWire = gl.createVertexArray();
     gl.bindVertexArray(this.vaoWire);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuf);
-    gl.enableVertexAttribArray(this.loc.aPos);
-    gl.vertexAttribPointer(this.loc.aPos, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.nBuf);
-    gl.enableVertexAttribArray(this.loc.aNormal);
-    gl.vertexAttribPointer(this.loc.aNormal, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.wBuf);
     gl.bindVertexArray(null);
+  }
+
+  _initQuad() {
+    const gl = this.gl;
+
+    const quad = new Float32Array([
+      -1, -1,
+       1, -1,
+       1,  1,
+      -1, -1,
+       1,  1,
+      -1,  1,
+    ]);
+
+    this.quadVAO = gl.createVertexArray();
+    this.quadVBO = gl.createBuffer();
+
+    gl.bindVertexArray(this.quadVAO);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.quadVBO);
+    gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
+
+    // ✅ EDGE_VS uses layout(location=0)
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+    gl.bindVertexArray(null);
+  }
+
+  _ensureNDFBO(w, h) {
+    const gl = this.gl;
+    if (this.ndFBO && this.ndW === w && this.ndH === h) return;
+
+    if (this.ndFBO) {
+      gl.deleteFramebuffer(this.ndFBO);
+      gl.deleteTexture(this.ndTex);
+      gl.deleteRenderbuffer(this.ndDepth);
+    }
+
+    this.ndW = w;
+    this.ndH = h;
+
+    this.ndFBO = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.ndFBO);
+
+    this.ndTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.ndTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    this.ndDepth = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, this.ndDepth);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, w, h);
+
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.ndTex, 0);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.ndDepth);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
   _setupMouse() {
@@ -283,13 +456,6 @@ export class Renderer {
   _drawViewport(x, y, w, h, modeForThisPass, timeMs) {
     const gl = this.gl;
 
-    gl.enable(gl.SCISSOR_TEST);
-    gl.viewport(x, y, w, h);
-    gl.scissor(x, y, w, h);
-    gl.clearColor(0.07, 0.08, 0.11, 1.0);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    gl.disable(gl.SCISSOR_TEST);
-
     const aspect = w / h;
     const proj = mat4Perspective(degToRad(60), aspect, 0.1, 100.0);
     const view = mat4Translate(0, 0, -this.distance);
@@ -305,10 +471,42 @@ export class Renderer {
     const model = mat4Multiply(mat4RotateY(ry), mat4RotateX(rx));
     const viewProj = mat4Multiply(proj, view);
 
-    // ✅ PASS 0: Flipped Hull outline (object-space)
+    const wantsScreenEdges = (this.lineMode === 2 || this.lineMode === 3);
+
+    // PASS A: Normal+Depth into FBO
+    if (wantsScreenEdges) {
+      this._ensureNDFBO(w, h);
+
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.ndFBO);
+      gl.viewport(0, 0, w, h);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+      gl.enable(gl.DEPTH_TEST);
+      gl.disable(gl.BLEND);
+
+      gl.useProgram(this.ndProgram);
+      gl.uniformMatrix4fv(this.ndLoc.uModel, false, model);
+      gl.uniformMatrix4fv(this.ndLoc.uViewProj, false, viewProj);
+
+      gl.bindVertexArray(this.vaoFill);
+      gl.drawElements(gl.TRIANGLES, this.indexCount, gl.UNSIGNED_SHORT, 0);
+      gl.bindVertexArray(null);
+
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+
+    // PASS B: Clear viewport
+    gl.enable(gl.SCISSOR_TEST);
+    gl.viewport(x, y, w, h);
+    gl.scissor(x, y, w, h);
+    gl.clearColor(1.0, 0.5, 0.5, 1.0); // arkaplan burası
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.disable(gl.SCISSOR_TEST);
+
+    // PASS 0: Flipped hull
     if (this.lineMode === 1) {
-      const t = this.lineThickness;           // 1..5
-      const scaleFactor = 1.0 + t * 0.03;     // demo’daki gibi
+      const scaleFactor = 1.0 + this.lineThickness * 0.03;
       const outlineModel = mat4Multiply(model, mat4ScaleUniform(scaleFactor));
 
       gl.useProgram(this.outlineProgram);
@@ -318,8 +516,8 @@ export class Renderer {
       gl.bindVertexArray(this.vaoFill);
 
       gl.enable(gl.CULL_FACE);
-      gl.cullFace(gl.FRONT);   // only backfaces
-      gl.depthMask(false);     // fill pass depth’ini bozma
+      gl.cullFace(gl.FRONT);
+      gl.depthMask(false);
 
       gl.drawElements(gl.TRIANGLES, this.indexCount, gl.UNSIGNED_SHORT, 0);
 
@@ -330,12 +528,10 @@ export class Renderer {
       gl.bindVertexArray(null);
     }
 
-    // PASS 1: normal fill
+    // PASS 1: Main shading
     gl.useProgram(this.program);
-
     gl.uniformMatrix4fv(this.loc.uModel, false, model);
     gl.uniformMatrix4fv(this.loc.uViewProj, false, viewProj);
-
     gl.uniform1i(this.loc.uMode, modeForThisPass);
     gl.uniform3fv(this.loc.uBaseColor, this.baseColor);
     gl.uniform3fv(this.loc.uCoolColor, this.coolColor);
@@ -343,21 +539,49 @@ export class Renderer {
     gl.uniform1f(this.loc.uSteps, this.toonSteps);
 
     gl.bindVertexArray(this.vaoFill);
-
     gl.enable(gl.POLYGON_OFFSET_FILL);
     gl.polygonOffset(1.0, 1.0);
     gl.uniform1i(this.loc.uWire, 0);
     gl.drawElements(gl.TRIANGLES, this.indexCount, gl.UNSIGNED_SHORT, 0);
     gl.disable(gl.POLYGON_OFFSET_FILL);
 
-    // wire overlay
     if (this.wireOverlay) {
       gl.bindVertexArray(this.vaoWire);
       gl.uniform1i(this.loc.uWire, 1);
       gl.drawElements(gl.LINES, this.wireCount, gl.UNSIGNED_SHORT, 0);
     }
-
     gl.bindVertexArray(null);
+
+    // PASS 2: Screen-space edges overlay
+    if (wantsScreenEdges) {
+      gl.enable(gl.SCISSOR_TEST);
+      gl.viewport(x, y, w, h);
+      gl.scissor(x, y, w, h);
+
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.disable(gl.DEPTH_TEST);
+
+      gl.useProgram(this.edgeProgram);
+      gl.bindVertexArray(this.quadVAO);
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.ndTex);
+      gl.uniform1i(this.eLoc.uND, 0);
+
+      gl.uniform2f(this.eLoc.uTexel, 1.0 / w, 1.0 / h);
+      gl.uniform1i(this.eLoc.uEdgeMode, this.lineMode); // 2 or 3
+      gl.uniform1f(this.eLoc.uThreshold, this.edgeThreshold);
+      gl.uniform1f(this.eLoc.uThickness, this.lineThickness);
+
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      gl.bindVertexArray(null);
+
+      gl.enable(gl.DEPTH_TEST);
+      gl.disable(gl.BLEND);
+      gl.disable(gl.SCISSOR_TEST);
+    }
   }
 
   render(timeMs) {
@@ -372,8 +596,8 @@ export class Renderer {
       this._drawViewport(0, 0, W, H, this.mode, timeMs);
     } else {
       const half = Math.floor(W / 2);
-      this._drawViewport(0, 0, half, H, 0, timeMs);          // left: Lambert
-      this._drawViewport(half, 0, W - half, H, this.mode, timeMs); // right: selected
+      this._drawViewport(0, 0, half, H, 0, timeMs);
+      this._drawViewport(half, 0, W - half, H, this.mode, timeMs);
     }
   }
 }

@@ -1,23 +1,21 @@
 // src/ui.js
 export function initUI(renderer) {
-  // --- shading controls ---
-  const shaderSelect  = document.getElementById("shaderSelect");
+  const shaderSelect = document.getElementById("shaderSelect");
   const compareToggle = document.getElementById("compareToggle");
-  const rotateToggle  = document.getElementById("rotateToggle");
-  const wireOverlay   = document.getElementById("wireOverlay");
+  const rotateToggle = document.getElementById("rotateToggle");
+  const wireOverlay = document.getElementById("wireOverlay");
 
-  const coolColor     = document.getElementById("coolColor");
-  const warmColor     = document.getElementById("warmColor");
-  const stepsSlider   = document.getElementById("stepsSlider");
-  const resetViewBtn  = document.getElementById("resetViewBtn");
+  const coolColor = document.getElementById("coolColor");
+  const warmColor = document.getElementById("warmColor");
+  const stepsSlider = document.getElementById("stepsSlider");
+  const resetViewBtn = document.getElementById("resetViewBtn");
 
-  // --- line controls ---
-  const lineMode          = document.getElementById("lineMode");
-  const lineThickness     = document.getElementById("lineThickness");
+  // Lines
+  const lineMode = document.getElementById("lineMode");
+  const lineThickness = document.getElementById("lineThickness");
+  const edgeThreshold = document.getElementById("edgeThreshold");
+
   const lineThicknessWrap = document.getElementById("lineThicknessWrap");
-
-  // (optional) screen-space threshold controls (HTML'e eklediysen çalışır)
-  const edgeThreshold     = document.getElementById("edgeThreshold");
   const edgeThresholdWrap = document.getElementById("edgeThresholdWrap");
 
   function hexToRgb01(hex) {
@@ -29,77 +27,81 @@ export function initUI(renderer) {
   }
 
   function updateControlVisibility() {
-    // shading UI
     const mode = shaderSelect.value;
     const showGooch = mode === "gooch";
-    const showToon  = mode === "toon";
+    const showToon = mode === "toon";
 
-    if (coolColor?.parentElement) coolColor.parentElement.style.display = showGooch ? "block" : "none";
-    if (warmColor?.parentElement) warmColor.parentElement.style.display = showGooch ? "block" : "none";
-    if (stepsSlider?.parentElement) stepsSlider.parentElement.style.display = showToon ? "block" : "none";
+    // Gooch controls
+    coolColor.parentElement.style.display = showGooch ? "block" : "none";
+    warmColor.parentElement.style.display = showGooch ? "block" : "none";
 
-    // line UI
-    const lm = parseInt(lineMode.value, 10); // 0=off, 1=flipped hull, 2=depth, 3=normal
-    if (lineThicknessWrap) lineThicknessWrap.style.display = (lm !== 0) ? "block" : "none";
+    // Toon steps
+    stepsSlider.parentElement.style.display = showToon ? "block" : "none";
 
-    // threshold sadece screen-space için (2/3)
-    if (edgeThresholdWrap) {
-      edgeThresholdWrap.style.display = (lm === 2 || lm === 3) ? "block" : "none";
-    }
+    // Lines visibility rules
+    const lm = parseInt(lineMode.value, 10);
+    const screen = (lm === 2 || lm === 3);
+    lineThicknessWrap.style.display = (lm !== 0) ? "block" : "none";
+    edgeThresholdWrap.style.display = screen ? "block" : "none";
   }
 
-  // --- events ---
+  // shading model
   shaderSelect.addEventListener("change", (e) => {
     renderer.setShaderMode(e.target.value);
     updateControlVisibility();
   });
 
+  // compare
   compareToggle.addEventListener("change", (e) => {
     renderer.setCompareMode(e.target.checked);
   });
 
+  // rotate
   rotateToggle.addEventListener("change", (e) => {
     renderer.setAutoRotate(e.target.checked);
   });
 
+  // wire overlay
   wireOverlay.addEventListener("change", (e) => {
     renderer.setWireOverlay(e.target.checked);
   });
 
+  // gooch colors
   coolColor.addEventListener("input", (e) => {
     renderer.setGoochCool(hexToRgb01(e.target.value));
   });
-
   warmColor.addEventListener("input", (e) => {
     renderer.setGoochWarm(hexToRgb01(e.target.value));
   });
 
+  // toon steps
   stepsSlider.addEventListener("input", (e) => {
     renderer.setToonSteps(parseFloat(e.target.value));
   });
 
+  // reset view
   resetViewBtn.addEventListener("click", () => {
     renderer.resetView();
   });
 
-  // line controls
+  // line mode
   lineMode.addEventListener("change", (e) => {
-    renderer.setLineMode(parseInt(e.target.value, 10));
+    const v = parseInt(e.target.value, 10);
+    renderer.setLineMode(v);
     updateControlVisibility();
   });
 
+  // line thickness
   lineThickness.addEventListener("input", (e) => {
     renderer.setLineThickness(parseFloat(e.target.value));
   });
 
-  // (optional) threshold
-  if (edgeThreshold) {
-    edgeThreshold.addEventListener("input", (e) => {
-      renderer.setEdgeThreshold(parseFloat(e.target.value));
-    });
-  }
+  // edge threshold (screen-space)
+  edgeThreshold.addEventListener("input", (e) => {
+    renderer.setEdgeThreshold?.(parseFloat(e.target.value));
+  });
 
-  // --- initial sync ---
+  // initial sync
   renderer.setShaderMode(shaderSelect.value);
   renderer.setCompareMode(compareToggle.checked);
   renderer.setAutoRotate(rotateToggle.checked);
@@ -111,10 +113,7 @@ export function initUI(renderer) {
 
   renderer.setLineMode(parseInt(lineMode.value, 10));
   renderer.setLineThickness(parseFloat(lineThickness.value));
-
-  if (edgeThreshold) {
-    renderer.setEdgeThreshold(parseFloat(edgeThreshold.value));
-  }
+  renderer.setEdgeThreshold?.(parseFloat(edgeThreshold.value));
 
   updateControlVisibility();
 }

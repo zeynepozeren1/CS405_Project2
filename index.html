@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CS405 Project 2 — Sphere</title>
+  <title>CS405 Project 2 — Cube</title>
 
   <style>
     html, body {
@@ -14,7 +14,12 @@
       color: #eee;
     }
 
-    #wrap { height: 100vh; display: flex; overflow: hidden; }
+    /* Sidebar + Canvas layout */
+    #wrap {
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
 
     #sidebar {
       width: 340px;
@@ -27,10 +32,20 @@
       z-index: 10;
     }
 
-    #sidebar h1 { font-size: 18px; margin: 0 0 12px 0; }
-    #sidebar h2 { font-size: 15px; margin: 16px 0 8px 0; }
+    #sidebar h1 {
+      font-size: 18px;
+      margin: 0 0 12px 0;
+    }
 
-    .control { margin-top: 10px; }
+    #sidebar h2 {
+      font-size: 15px;
+      margin: 16px 0 8px 0;
+    }
+
+    .control {
+      margin-top: 10px;
+    }
+
     .control label {
       display: block;
       font-weight: 600;
@@ -38,8 +53,14 @@
       margin-bottom: 6px;
     }
 
-    select, input[type="range"], input[type="color"] { width: 100%; box-sizing: border-box; }
-    select { height: 28px; }
+    select, input[type="range"], input[type="color"] {
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    select {
+      height: 28px;
+    }
 
     .row {
       display: flex;
@@ -51,7 +72,11 @@
       user-select: none;
     }
 
-    .row input[type="checkbox"] { width: 16px; height: 16px; accent-color: #667eea; }
+    .row input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: #667eea;
+    }
 
     button {
       margin-top: 12px;
@@ -71,7 +96,12 @@
       line-height: 1.45;
     }
 
-    #status { font-size: 12px; color: #9ad; margin-top: 10px; font-weight: 700; }
+    #status {
+      font-size: 12px;
+      color: #9ad;
+      margin-top: 10px;
+      font-weight: 700;
+    }
 
     #canvas-container {
       flex: 1;
@@ -97,7 +127,7 @@
 <body>
   <div id="wrap">
     <aside id="sidebar">
-      <h1>Sphere Renderer (CS405 Project 2)</h1>
+      <h1>Cube Renderer (CS405 Project 2)</h1>
 
       <h2>Controls</h2>
 
@@ -168,7 +198,7 @@
 
       <div class="small">
         Mouse: drag to orbit, wheel to zoom.<br />
-        Object: <strong>Cube</strong> only.
+        Object: <strong>Cube</strong>.
       </div>
     </aside>
 
