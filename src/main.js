@@ -2,7 +2,7 @@
 import { createGL } from "./gl.js";
 import { Renderer } from "./renderer.js";
 import { initUI } from "./ui.js";
-import { createCubeMesh } from "./geometry.js";
+import { createSmoothCubeMesh } from "./geometry.js";
 import { parseOBJ } from "./objLoader.js";
 
 function main() {
@@ -16,7 +16,7 @@ function main() {
   const renderer = new Renderer(gl, canvas);
 
   // Default: built-in cube
-  const builtinMesh = createCubeMesh(1.6);
+  const builtinMesh = createSmoothCubeMesh(1.6);
   renderer.setMesh(builtinMesh);
 
   initUI(renderer);
