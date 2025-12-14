@@ -2,7 +2,7 @@
 import { createGL } from "./gl.js";
 import { Renderer } from "./renderer.js";
 import { initUI } from "./ui.js";
-import { createCubeMesh } from "./geometry.js";
+import { createSmoothCubeMesh } from "./geometry.js";
 
 function main() {
   const canvas = document.getElementById("glcanvas");
@@ -13,8 +13,7 @@ function main() {
 
   const renderer = new Renderer(gl, canvas);
 
-  // Tek obje: Sphere
-  renderer.setMesh(createCubeMesh(1.6));
+  renderer.setMesh(createSmoothCubeMesh(1.6));
 
   initUI(renderer);
 

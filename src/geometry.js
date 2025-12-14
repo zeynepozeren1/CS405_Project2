@@ -105,4 +105,65 @@ export function createCubeMesh(size = 1.6) {
     lineIndices,
   };
 }
+export function createSmoothCubeMesh(size = 1.6) {
+  const s = size * 0.5;
+
+  // 8 unique corners
+  const positions = new Float32Array([
+    -s,-s,-s,   s,-s,-s,   s, s,-s,  -s, s,-s,  // back quad corners
+    -s,-s, s,   s,-s, s,   s, s, s,  -s, s, s,  // front quad corners
+  ]);
+
+  // corner normals = normalized corner direction
+  const normals = new Float32Array([
+    -1,-1,-1,  1,-1,-1,  1, 1,-1, -1, 1,-1,
+    -1,-1, 1,  1,-1, 1,  1, 1, 1, -1, 1, 1,
+  ].map((v, i, arr) => {
+    // normalize every triple
+    const k = i - (i % 3);
+    if (i % 3 !== 0) return v; // we'll normalize after (below)
+    const x = arr[k], y = arr[k+1], z = arr[k+2];
+    const len = Math.hypot(x,y,z) || 1;
+    arr[k]   = x/len;
+    arr[k+1] = y/len;
+    arr[k+2] = z/len;
+    return arr[i];
+  }));
+
+  // indices using the 8 corners
+  const idx = new Uint16Array([
+    // front (4,5,6,7)
+    4,5,6,  4,6,7,
+    // back (0,1,2,3)
+    0,2,1,  0,3,2,
+    // left (0,4,7,3)
+    0,4,7,  0,7,3,
+    // right (1,2,6,5)
+    1,6,2,  1,5,6,
+    // top (3,7,6,2)
+    3,7,6,  3,6,2,
+    // bottom (0,1,5,4)
+    0,5,1,  0,4,5,
+  ]);
+
+  const lineIndices = (function buildLines(tri) {
+    const lines = new Uint16Array(tri.length * 2);
+    let k = 0;
+    for (let i = 0; i < tri.length; i += 3) {
+      const a = tri[i], b = tri[i+1], c = tri[i+2];
+      lines[k++] = a; lines[k++] = b;
+      lines[k++] = b; lines[k++] = c;
+      lines[k++] = c; lines[k++] = a;
+    }
+    return lines;
+  })(idx);
+
+  return {
+    positions,
+    normals,
+    indices: idx,
+    lineIndices,
+  };
+}
+
 
