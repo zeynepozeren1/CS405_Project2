@@ -100,6 +100,7 @@ export class Renderer {
     // ✅ NEW: line mode
     this.lineMode = 0;        // 0 disabled, 1 flipped hull
     this.lineThickness = 2.0; // 1..5
+    this.edgeThreshold = 0.18;
 
     // shading params
     this.mode = 0;
@@ -149,6 +150,11 @@ export class Renderer {
   setWireOverlay(on) { this.wireOverlay = on; }
   setCompareMode(on) { this.compare = on; }
 
+  setLineMode(v) { this.lineMode = v; }                 // 0/1/2/3
+  setLineThickness(v) { this.lineThickness = v; }       // 1..5
+  setEdgeThreshold(v) { this.edgeThreshold = v; }       // 0.02..0.6
+
+
   setShaderMode(modeStr) {
     if (modeStr === "lambert") this.mode = 0;
     else if (modeStr === "gooch") this.mode = 1;
@@ -159,10 +165,6 @@ export class Renderer {
   setGoochCool(rgb01) { this.coolColor = new Float32Array(rgb01); }
   setGoochWarm(rgb01) { this.warmColor = new Float32Array(rgb01); }
   setToonSteps(v) { this.toonSteps = v; }
-
-  // ✅ NEW
-  setLineMode(v) { this.lineMode = v; }            // 0/1
-  setLineThickness(v) { this.lineThickness = v; }  // 1..5
 
   resetView() {
     this.yaw = 0.8;

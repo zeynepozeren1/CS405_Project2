@@ -2,7 +2,7 @@
 import { createGL } from "./gl.js";
 import { Renderer } from "./renderer.js";
 import { initUI } from "./ui.js";
-import { createSphereMesh } from "./geometry.js";
+import { createCubeMesh } from "./geometry.js";
 
 function main() {
   const canvas = document.getElementById("glcanvas");
@@ -14,7 +14,7 @@ function main() {
   const renderer = new Renderer(gl, canvas);
 
   // Tek obje: Sphere
-  renderer.setMesh(createSphereMesh(1.0, 48, 32));
+  renderer.setMesh(createCubeMesh(1.6));
 
   initUI(renderer);
 
@@ -24,5 +24,6 @@ function main() {
   }
   requestAnimationFrame(loop);
 }
+
 
 main();

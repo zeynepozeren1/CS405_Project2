@@ -125,7 +125,6 @@
         <input id="stepsSlider" type="range" min="2" max="8" step="1" value="3" />
       </div>
 
-      <!-- ✅ NEW: Lines -->
       <h2>Lines</h2>
 
       <div class="control">
@@ -133,12 +132,19 @@
         <select id="lineMode">
           <option value="0">Disabled</option>
           <option value="1">Object-Space Outline (Flipped Hull)</option>
+          <option value="2">Screen-Space Depth Edges</option>
+          <option value="3">Screen-Space Normal Edges</option>
         </select>
       </div>
 
       <div class="control" id="lineThicknessWrap">
         <label for="lineThickness">Line Thickness</label>
         <input id="lineThickness" type="range" min="1" max="5" step="1" value="2" />
+      </div>
+
+      <div class="control" id="edgeThresholdWrap">
+        <label for="edgeThreshold">Edge Threshold (Screen-Space)</label>
+        <input id="edgeThreshold" type="range" min="0.02" max="0.6" step="0.02" value="0.18" />
       </div>
 
       <button id="resetViewBtn">Reset View</button>
@@ -162,7 +168,7 @@
 
       <div class="small">
         Mouse: drag to orbit, wheel to zoom.<br />
-        Object: <strong>Sphere</strong> only.
+        Object: <strong>Cube</strong> only.
       </div>
     </aside>
 
