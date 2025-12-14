@@ -67,3 +67,13 @@ export function mat4RotateX(rad) {
     0,0,0,1
   ]);
 }
+
+export function mat4ScaleUniform(s) {
+  return new Float32Array([
+    s,0,0,0,
+    0,s,0,0,
+    0,0,s,0,
+    0,0,0,1
+  ]);
+}
+

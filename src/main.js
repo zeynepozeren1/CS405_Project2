@@ -13,13 +13,13 @@ function main() {
 
   const renderer = new Renderer(gl, canvas);
 
-  // TEK OBJECT: SPHERE
-  renderer.setMesh(createSphereMesh(1.7, 32, 32)); // istersen 16,16 yapabilirsin
+  // Tek obje: Sphere
+  renderer.setMesh(createSphereMesh(1.0, 48, 32));
 
   initUI(renderer);
 
-  function loop(timeMs) {
-    renderer.render(timeMs);
+  function loop(t) {
+    renderer.render(t);
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);

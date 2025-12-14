@@ -2,65 +2,173 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <title>CS405 Project 2</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CS405 Project 2 — Sphere</title>
 
   <style>
-    html, body { height: 100%; margin: 0; }
-    body { background:#0b1020; color:#e5e7eb; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #05070b;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #eee;
+    }
 
-    #topbar{
-      position: fixed; top: 0; left: 0; right: 0;
-      height: 44px;
-      display:flex; align-items:center; gap:14px;
-      padding: 0 14px;
-      background: rgba(255,255,255,0.92);
-      color:#111827;
-      border-bottom: 1px solid rgba(0,0,0,0.08);
-      z-index: 5;
+    #wrap { height: 100vh; display: flex; overflow: hidden; }
+
+    #sidebar {
+      width: 340px;
+      flex: 0 0 340px;
+      box-sizing: border-box;
+      padding: 16px;
+      border-right: 1px solid #333;
+      background: #181818;
+      overflow-y: auto;
+      z-index: 10;
+    }
+
+    #sidebar h1 { font-size: 18px; margin: 0 0 12px 0; }
+    #sidebar h2 { font-size: 15px; margin: 16px 0 8px 0; }
+
+    .control { margin-top: 10px; }
+    .control label {
+      display: block;
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+
+    select, input[type="range"], input[type="color"] { width: 100%; box-sizing: border-box; }
+    select { height: 28px; }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+      font-size: 13px;
+      font-weight: 600;
       user-select: none;
     }
-    #topbar label { display:flex; align-items:center; gap:8px; font-size:14px; }
-    #topbar select { height: 28px; }
-    #topbar input[type="checkbox"]{ width: 16px; height: 16px; }
 
-    #status { margin-left:auto; font-weight:700; }
-    #wrap { height: 100%; padding-top: 44px; }
-    #glcanvas { width: 100%; height: calc(100vh - 44px); display:block; background:#050711; }
+    .row input[type="checkbox"] { width: 16px; height: 16px; accent-color: #667eea; }
+
+    button {
+      margin-top: 12px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #222;
+      color: #eee;
+      cursor: pointer;
+    }
+    button:hover { background: #2c2c2c; }
+
+    .small {
+      font-size: 12px;
+      color: #aaa;
+      margin-top: 12px;
+      line-height: 1.45;
+    }
+
+    #status { font-size: 12px; color: #9ad; margin-top: 10px; font-weight: 700; }
+
+    #canvas-container {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      background: #05070b;
+    }
+
+    #glcanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #05070b;
+      touch-action: none;
+      cursor: grab;
+    }
+    #glcanvas:active { cursor: grabbing; }
   </style>
 </head>
 
 <body>
-  <div id="topbar">
-    <label>
-      Shader:
-      <select id="shaderSelect">
-        <option value="toon">Toon</option>
-        <option value="edge">Edge</option>
-        <option value="oil">Oil</option>
-      </select>
-    </label>
-
-    <label>
-      Compare (side-by-side):
-      <input id="compareToggle" type="checkbox" />
-    </label>
-
-    <label>
-      Wire overlay:
-      <input id="wireOverlay" type="checkbox" />
-    </label>
-
-    <label>
-      Rotate:
-      <input id="rotateToggle" type="checkbox" checked />
-    </label>
-
-    <span id="status"></span>
-  </div>
-
   <div id="wrap">
-    <canvas id="glcanvas"></canvas>
+    <aside id="sidebar">
+      <h1>Sphere Renderer (CS405 Project 2)</h1>
+
+      <h2>Controls</h2>
+
+      <div class="control">
+        <label for="shaderSelect">Shading Model</label>
+        <select id="shaderSelect">
+          <option value="lambert">Photorealistic / Lambert</option>
+          <option value="gooch">Gooch Shading</option>
+          <option value="toon">Toon / Cel Shading</option>
+        </select>
+      </div>
+
+      <div class="control" id="goochCoolWrap">
+        <label for="coolColor">Gooch Cool Color (Shadow Side)</label>
+        <input id="coolColor" type="color" value="#3366cc" />
+      </div>
+
+      <div class="control" id="goochWarmWrap">
+        <label for="warmColor">Gooch Warm Color (Lit Side)</label>
+        <input id="warmColor" type="color" value="#ffcc66" />
+      </div>
+
+      <div class="control" id="toonStepsWrap">
+        <label for="stepsSlider">Toon Quantization Steps</label>
+        <input id="stepsSlider" type="range" min="2" max="8" step="1" value="3" />
+      </div>
+
+      <!-- ✅ NEW: Lines -->
+      <h2>Lines</h2>
+
+      <div class="control">
+        <label for="lineMode">Line Source</label>
+        <select id="lineMode">
+          <option value="0">Disabled</option>
+          <option value="1">Object-Space Outline (Flipped Hull)</option>
+        </select>
+      </div>
+
+      <div class="control" id="lineThicknessWrap">
+        <label for="lineThickness">Line Thickness</label>
+        <input id="lineThickness" type="range" min="1" max="5" step="1" value="2" />
+      </div>
+
+      <button id="resetViewBtn">Reset View</button>
+
+      <div class="row">
+        <input id="compareToggle" type="checkbox" />
+        <label for="compareToggle" style="margin:0; font-weight:600;">Compare (side-by-side)</label>
+      </div>
+
+      <div class="row">
+        <input id="wireOverlay" type="checkbox" />
+        <label for="wireOverlay" style="margin:0; font-weight:600;">Wire overlay</label>
+      </div>
+
+      <div class="row">
+        <input id="rotateToggle" type="checkbox" checked />
+        <label for="rotateToggle" style="margin:0; font-weight:600;">Rotate</label>
+      </div>
+
+      <div id="status">Loading…</div>
+
+      <div class="small">
+        Mouse: drag to orbit, wheel to zoom.<br />
+        Object: <strong>Sphere</strong> only.
+      </div>
+    </aside>
+
+    <main id="canvas-container">
+      <canvas id="glcanvas"></canvas>
+    </main>
   </div>
 
   <script type="module" src="./src/main.js"></script>
