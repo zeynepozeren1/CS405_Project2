@@ -35,8 +35,7 @@ export function parseOBJ(text, opts = {}) {
 
   const pos = [];   // [[x,y,z], ...]
   const nor = [];   // [[x,y,z], ...]
-  const faces = []; // array of faces, each face: [{vi, ni|null}, ...]
-
+  const faces = []; // array of faces
   const lines = text.split(/\r?\n/);
   for (const raw of lines) {
     const line = raw.trim();
@@ -51,7 +50,7 @@ export function parseOBJ(text, opts = {}) {
       const n = normalize3(parseFloat(parts[1]), parseFloat(parts[2]), parseFloat(parts[3]));
       nor.push(n);
     } else if (tag === "f" && parts.length >= 4) {
-      // f v/vt/vn or v//vn or v
+      
       const verts = [];
       for (let i = 1; i < parts.length; i++) {
         const tok = parts[i];
@@ -118,7 +117,7 @@ export function parseOBJ(text, opts = {}) {
     outNormals = acc.map(a => normalize3(a[0], a[1], a[2]));
   } else {
     // Build unique vertices by (vi, ni)
-    const map = new Map(); // key -> newIndex
+    const map = new Map(); 
 
     function getIndex(vi, ni) {
       const key = `${vi}/${ni}`;

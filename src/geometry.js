@@ -58,7 +58,7 @@ export function createSphereMesh(radius = 1.0, slices = 48, stacks = 32) {
 export function createCubeMesh(size = 1.6) {
   const s = size * 0.5;
 
-  // 6 face * 4 vertex = 24 vertex (hard edges için her yüz ayrı vertex)
+  //24 vertex 
   const positions = new Float32Array([
     // +Z (front)
     -s,-s, s,   s,-s, s,   s, s, s,  -s, s, s,
@@ -110,8 +110,8 @@ export function createSmoothCubeMesh(size = 1.6) {
 
   // 8 unique corners
   const positions = new Float32Array([
-    -s,-s,-s,   s,-s,-s,   s, s,-s,  -s, s,-s,  // back quad corners
-    -s,-s, s,   s,-s, s,   s, s, s,  -s, s, s,  // front quad corners
+    -s,-s,-s,   s,-s,-s,   s, s,-s,  -s, s,-s,  // back
+    -s,-s, s,   s,-s, s,   s, s, s,  -s, s, s,  // front
   ]);
 
   // corner normals = normalized corner direction

@@ -1,4 +1,4 @@
-//“WebGL’in sinir sistemi”: shader kurma, program oluşturma, FBO/texture gibi temel parçalar.
+//src/gl.js
 export function createGL(canvas) {
   const gl = canvas.getContext("webgl2", { antialias: true });
 

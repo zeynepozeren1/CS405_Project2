@@ -10,9 +10,8 @@ import {
   mat4ScaleUniform,
 } from "./utils.js";
 
-// -------------------- SHADERS --------------------
+//SHADERS
 
-// ✅ Attribute locations fixed (CRITICAL)
 const VS = `#version 300 es
 precision highp float;
 
@@ -34,8 +33,6 @@ void main() {
 `;
 
 // Main shading (Lambert/Gooch/Toon/Hatch)
-// ✅ Toon uses LUT/ramp texture (uRamp)
-// ✅ Hatch is student-designed: procedural triplanar cross-hatching
 const FS = `#version 300 es
 precision highp float;
 
@@ -155,7 +152,7 @@ void main() {
 }
 `;
 
-// Flipped hull outline
+// Flipped hull outline 
 const OUTLINE_FS = `#version 300 es
 precision highp float;
 out vec4 outColor;
@@ -164,7 +161,7 @@ void main() {
 }
 `;
 
-// Normal+Depth pass to texture (RGBA: normal in rgb, depth in a)
+// Normal+Depth pass to texture 
 const ND_FS = `#version 300 es
 precision highp float;
 
@@ -244,7 +241,7 @@ void main() {
 }
 `;
 
-// -------------------- RENDERER --------------------
+// RENDERER 
 
 export class Renderer {
   constructor(gl, canvas) {
@@ -346,7 +343,7 @@ export class Renderer {
     gl.enable(gl.DEPTH_TEST);
   }
 
-  // ---- UI setters ----
+  // UI setters
   setAutoRotate(on) { this.autoRotate = on; }
   setWireOverlay(on) { this.wireOverlay = on; }
   setCompareMode(on) { this.compare = on; }
@@ -367,7 +364,7 @@ export class Renderer {
   setHatchWidth(v) { this.hatchWidth = v; }
   setHatchStrength(v) { this.hatchStrength = v; }
 
-  // ✅ IMPORTANT: steps değişince ramp texture yeniden üretiliyor
+  //steps değişince ramp texture yeniden üretiliyor
   setToonSteps(v) {
     this.toonSteps = v;
 
@@ -386,7 +383,7 @@ export class Renderer {
     this.distance = 4.0;
   }
 
-  // ---- Toon LUT texture generator ----
+  // Toon LUT texture generator 
   _createToonRampTexture(steps) {
     const gl = this.gl;
 
@@ -410,7 +407,6 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, size, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
 
-    // band’ler net olsun diye NEAREST
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -420,7 +416,7 @@ export class Renderer {
     return tex;
   }
 
-  // ---- mesh upload ----
+  // mesh upload 
   setMesh(mesh) {
     const gl = this.gl;
     this.mesh = mesh;
@@ -445,7 +441,6 @@ export class Renderer {
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.lineIndices, gl.STATIC_DRAW);
     this.wireCount = mesh.lineIndices.length;
 
-    // ✅ VAO fill (location 0/1 fixed)
     this.vaoFill = gl.createVertexArray();
     gl.bindVertexArray(this.vaoFill);
 
@@ -460,7 +455,7 @@ export class Renderer {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.iBuf);
     gl.bindVertexArray(null);
 
-    // ✅ VAO wire
+    // VAO wire
     this.vaoWire = gl.createVertexArray();
     gl.bindVertexArray(this.vaoWire);
 
@@ -495,7 +490,7 @@ export class Renderer {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadVBO);
     gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
 
-    // ✅ EDGE_VS uses layout(location=0)
+    // EDGE_VS uses layout(location=0)
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
@@ -636,11 +631,11 @@ export class Renderer {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 
-    // PASS B: Clear viewport (dark background)
+    // PASS B: Clear viewport 
     gl.enable(gl.SCISSOR_TEST);
     gl.viewport(x, y, w, h);
     gl.scissor(x, y, w, h);
-    gl.clearColor(0.7, 0.5, 0.5, 1.0); // arka plan
+    gl.clearColor(0.7, 0.5, 0.5, 1.0); // background color
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.disable(gl.SCISSOR_TEST);
 
@@ -671,7 +666,7 @@ export class Renderer {
     // PASS 1: Main shading
     gl.useProgram(this.program);
 
-    // ✅ bind toon ramp texture (always bound; only used when uMode==2)
+    //bind toon ramp texture (always bound; only used when uMode==2)
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.rampTex);
     gl.uniform1i(this.loc.uRamp, 0);

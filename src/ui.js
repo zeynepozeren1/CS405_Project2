@@ -58,7 +58,7 @@ export function initUI(renderer) {
     edgeThresholdWrap.style.display = screen ? "block" : "none";
   }
 
-  // -------------------- Events --------------------
+  //Events
 
   // shading model
   shaderSelect.addEventListener("change", (e) => {
@@ -133,7 +133,7 @@ export function initUI(renderer) {
     renderer.setEdgeThreshold?.(parseFloat(e.target.value));
   });
 
-  // -------------------- Initial sync --------------------
+  // Initial sync 
 
   renderer.setShaderMode(shaderSelect.value);
   renderer.setCompareMode(compareToggle.checked);
@@ -156,7 +156,7 @@ export function initUI(renderer) {
   updateControlVisibility();
 }
 
-// -------------------- Small helpers --------------------
+//Small helpers 
 export function degToRad(d) {
   return (d * Math.PI) / 180;
 }

@@ -21,7 +21,7 @@ function main() {
 
   initUI(renderer);
 
-  // ---------- OBJ Loader UI ----------
+  //OBJ Loader UI
   const fileInput = document.getElementById("objFile");
   const useBuiltinBtn = document.getElementById("useBuiltinBtn");
 
@@ -47,7 +47,7 @@ function main() {
     if (fileInput) fileInput.value = "";
   });
 
-  // ---------- FPS Counter ----------
+  //FPS Counter
   let frames = 0;
   let last = performance.now();
 

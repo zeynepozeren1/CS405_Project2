@@ -1,4 +1,4 @@
-//Küçük yardımcı fonksiyonlar. Kod kalabalığını ana dosyalardan uzak tutar.
+//src/utils.js
 export function degToRad(d) {
   return (d * Math.PI) / 180;
 }
